@@ -6,14 +6,16 @@
 
 #![allow(trivial_numeric_casts)]
 
-use std::str::{self, FromStr};
 use std::num::ParseIntError;
+use std::str::{self, FromStr};
 
-use nom::{IResult, ErrorKind, hex_digit, oct_digit, digit, is_alphanumeric, alpha, line_ending,
-          not_line_ending, multispace, space, rest};
+use nom::{
+    alpha, digit, hex_digit, is_alphanumeric, line_ending, multispace, not_line_ending, oct_digit,
+    rest, space, ErrorKind, IResult,
+};
 
-use tree::{DTInfo, ReserveInfo, Node, NodeName, Property, Data, Cell};
-use ::ParseError;
+use tree::{Cell, DTInfo, Data, Node, NodeName, Property, ReserveInfo};
+use ParseError;
 
 // Copied and modified from rust-lang/rust/src/libcore/num/mod.rs
 trait FromStrRadix: PartialOrd + Copy {
@@ -42,15 +44,26 @@ fn from_str_dec<T: FromStr>(s: &str) -> Result<T, T::Err> {
 
 // This is dumb and feels wrong, but it works so I will complain no more.
 // Thank you to Filipe Gonçalves and https://crates.io/crates/config for the inspiration.
-named!(eat_junk,
-       do_parse!(many0!(alt!(delimited!(tag!("/*"), take_until!("*/"), tag!("*/")) |
-                             delimited!(tag!("//"), not_line_ending, line_ending) |
-                             do_parse!(tag!("#") >> opt!(tag!("line")) >> space >>
-                                       digit >>
-                                       space >>
-                                       string: not_line_ending >>
-                                       line_ending >>
-                                       (string)) | multispace)) >> (&b""[..])));
+named!(
+    eat_junk,
+    do_parse!(
+        many0!(alt!(
+            delimited!(tag!("/*"), take_until!("*/"), tag!("*/"))
+                | delimited!(tag!("//"), not_line_ending, line_ending)
+                | do_parse!(
+                    tag!("#")
+                        >> opt!(tag!("line"))
+                        >> space
+                        >> digit
+                        >> space
+                        >> string: not_line_ending
+                        >> line_ending
+                        >> (string)
+                )
+                | multispace
+        )) >> (&b""[..])
+    )
+);
 
 macro_rules! comments_ws (
     ($i:expr, $($args:tt)*) => ( {
@@ -59,31 +72,34 @@ macro_rules! comments_ws (
     } )
 );
 
-named!(opr_infix<OprInfix>, alt_complete!(
-    tag!("*") => { |_| OprInfix::Multiply } |
-    tag!("/") => { |_| OprInfix::Divide } |
-    tag!("%") => { |_| OprInfix::Modulus } |
+named!(
+    opr_infix<OprInfix>,
+    alt_complete!(
+        tag!("*") => { |_| OprInfix::Multiply } |
+        tag!("/") => { |_| OprInfix::Divide } |
+        tag!("%") => { |_| OprInfix::Modulus } |
 
-    tag!("+") => { |_| OprInfix::Add } |
-    tag!("-") => { |_| OprInfix::Subtract } |
+        tag!("+") => { |_| OprInfix::Add } |
+        tag!("-") => { |_| OprInfix::Subtract } |
 
-    tag!("<<") => { |_| OprInfix::LeftShift } |
-    tag!(">>") => { |_| OprInfix::RightShift } |
+        tag!("<<") => { |_| OprInfix::LeftShift } |
+        tag!(">>") => { |_| OprInfix::RightShift } |
 
-    tag!("<=") => { |_| OprInfix::LesserEqual } |
-    tag!(">=") => { |_| OprInfix::GreaterEqual } |
-    tag!("<") => { |_| OprInfix::Lesser } |
-    tag!(">") => { |_| OprInfix::Greater } |
-    tag!("==") => { |_| OprInfix::Equal } |
-    tag!("!=") => { |_| OprInfix::NotEqual } |
+        tag!("<=") => { |_| OprInfix::LesserEqual } |
+        tag!(">=") => { |_| OprInfix::GreaterEqual } |
+        tag!("<") => { |_| OprInfix::Lesser } |
+        tag!(">") => { |_| OprInfix::Greater } |
+        tag!("==") => { |_| OprInfix::Equal } |
+        tag!("!=") => { |_| OprInfix::NotEqual } |
 
-    tag!("&&") => { |_| OprInfix::And } |
-    tag!("||") => { |_| OprInfix::Or } |
+        tag!("&&") => { |_| OprInfix::And } |
+        tag!("||") => { |_| OprInfix::Or } |
 
-    tag!("&") => { |_| OprInfix::BitAnd } |
-    tag!("^") => { |_| OprInfix::BitXor } |
-    tag!("|") => { |_| OprInfix::BitOr }
-));
+        tag!("&") => { |_| OprInfix::BitAnd } |
+        tag!("^") => { |_| OprInfix::BitXor } |
+        tag!("|") => { |_| OprInfix::BitOr }
+    )
+);
 
 #[derive(PartialEq, Debug)]
 enum OprInfix {
@@ -125,28 +141,79 @@ impl OprInfix {
             OprInfix::LeftShift => a << b,
             OprInfix::RightShift => a >> b,
 
-            OprInfix::Lesser => if a < b { 1 } else { 0 },
-            OprInfix::Greater => if a > b { 1 } else { 0 },
-            OprInfix::LesserEqual => if a <= b { 1 } else { 0 },
-            OprInfix::GreaterEqual => if a >= b { 1 } else { 0 },
-            OprInfix::Equal => if a == b { 1 } else { 0 },
-            OprInfix::NotEqual => if a != b { 1 } else { 0 },
+            OprInfix::Lesser => {
+                if a < b {
+                    1
+                } else {
+                    0
+                }
+            }
+            OprInfix::Greater => {
+                if a > b {
+                    1
+                } else {
+                    0
+                }
+            }
+            OprInfix::LesserEqual => {
+                if a <= b {
+                    1
+                } else {
+                    0
+                }
+            }
+            OprInfix::GreaterEqual => {
+                if a >= b {
+                    1
+                } else {
+                    0
+                }
+            }
+            OprInfix::Equal => {
+                if a == b {
+                    1
+                } else {
+                    0
+                }
+            }
+            OprInfix::NotEqual => {
+                if a != b {
+                    1
+                } else {
+                    0
+                }
+            }
 
             OprInfix::BitAnd => a & b,
             OprInfix::BitXor => a ^ b,
             OprInfix::BitOr => a | b,
 
-            OprInfix::And => if a != 0 && b != 0 { 1 } else { 0 },
-            OprInfix::Or => if a != 0 || b != 0 { 1 } else { 0 },
+            OprInfix::And => {
+                if a != 0 && b != 0 {
+                    1
+                } else {
+                    0
+                }
+            }
+            OprInfix::Or => {
+                if a != 0 || b != 0 {
+                    1
+                } else {
+                    0
+                }
+            }
         }
     }
 }
 
-named!(opr_prefix<OprPrefix>, alt_complete!(
-    tag!("!") => { |_| OprPrefix::Not } |
-    tag!("~") => { |_| OprPrefix::BitNot } |
-    tag!("-") => { |_| OprPrefix::Negate }
-));
+named!(
+    opr_prefix<OprPrefix>,
+    alt_complete!(
+        tag!("!") => { |_| OprPrefix::Not } |
+        tag!("~") => { |_| OprPrefix::BitNot } |
+        tag!("-") => { |_| OprPrefix::Negate }
+    )
+);
 
 #[derive(PartialEq, Debug)]
 enum OprPrefix {
@@ -160,7 +227,13 @@ impl OprPrefix {
         match *self {
             OprPrefix::Negate => a.wrapping_neg(),
             OprPrefix::BitNot => a ^ u64::max_value(),
-            OprPrefix::Not => if a == 0 { 1 } else { 0 },
+            OprPrefix::Not => {
+                if a == 0 {
+                    1
+                } else {
+                    0
+                }
+            }
         }
     }
 }
@@ -216,13 +289,13 @@ fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
                 if let Some(&Token::Number(a)) = stack.last() {
                     if (tok == OprInfix::Greater || tok == OprInfix::BitAnd) && stack.len() == 1 {
                         if let IResult::Done(cleaned, _) = eat_junk(matched) {
-                            named!(test, preceded!(
-                                eat_junk,
-                                alt!(
-                                    tag!("(") |
-                                    recognize!(opr_prefix) |
-                                    recognize!(integer)
-                            )));
+                            named!(
+                                test,
+                                preceded!(
+                                    eat_junk,
+                                    alt!(tag!("(") | recognize!(opr_prefix) | recognize!(integer))
+                                )
+                            );
                             match test(cleaned) {
                                 IResult::Done(_, _) => {}
                                 _ => return IResult::Done(buf, a),
@@ -257,9 +330,9 @@ fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
                             None => {
                                 stack.push(Token::Paren);
                             }
-                            Some(x @ Token::Paren) |
-                            Some(x @ Token::Prefix(_)) |
-                            Some(x @ Token::Infix(_)) => {
+                            Some(x @ Token::Paren)
+                            | Some(x @ Token::Prefix(_))
+                            | Some(x @ Token::Infix(_)) => {
                                 stack.push(x);
                                 stack.push(Token::Paren);
                             }
@@ -267,9 +340,10 @@ fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
                                 if stack.is_empty() {
                                     return IResult::Done(buf, a);
                                 } else {
-                                    return IResult::Error(
-                                        error_position!(ErrorKind::Custom(1), buf)
-                                    );
+                                    return IResult::Error(error_position!(
+                                        ErrorKind::Custom(1),
+                                        buf
+                                    ));
                                 }
                             }
                         };
@@ -296,14 +370,18 @@ fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
                                             let num = x.apply(a, num);
                                             stack.push(Token::Number(num));
                                         } else {
-                                            return IResult::Error(
-                                                error_position!(ErrorKind::Custom(1), buf)
-                                            );
+                                            return IResult::Error(error_position!(
+                                                ErrorKind::Custom(1),
+                                                buf
+                                            ));
                                         }
                                     }
-                                    _ => return IResult::Error(
-                                            error_position!(ErrorKind::Custom(1), buf)
-                                        ),
+                                    _ => {
+                                        return IResult::Error(error_position!(
+                                            ErrorKind::Custom(1),
+                                            buf
+                                        ))
+                                    }
                                 };
                             } else {
                                 return IResult::Error(error_position!(ErrorKind::Custom(1), buf));
@@ -313,20 +391,16 @@ fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
                         }
                     }
 
-                    b';' => {
-                        match stack.pop() {
-                            Some(Token::Number(a)) => {
-                                if stack.is_empty() {
-                                    return IResult::Done(buf, a);
-                                } else {
-                                    return IResult::Error(
-                                        error_position!(ErrorKind::Custom(1), buf)
-                                    );
-                                }
+                    b';' => match stack.pop() {
+                        Some(Token::Number(a)) => {
+                            if stack.is_empty() {
+                                return IResult::Done(buf, a);
+                            } else {
+                                return IResult::Error(error_position!(ErrorKind::Custom(1), buf));
                             }
-                            _ => return IResult::Error(error_position!(ErrorKind::Custom(1), buf)),
                         }
-                    }
+                        _ => return IResult::Error(error_position!(ErrorKind::Custom(1), buf)),
+                    },
 
                     x => {
                         println!("Unimplemented char: {}", x as char);
@@ -370,20 +444,35 @@ comments_ws!(do_parse!( // trinary
 */
 
 // ([0-9]+|0[xX][0-9a-fA-F]+)(U|L|UL|LL|ULL)
-named!(integer<u64>, terminated!(
-    alt_complete!(
-        complete!(preceded!(tag_no_case!("0x"),
-            map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>))) |
-        preceded!(tag_no_case!("0"),
-            map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u64>)) |
-        map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u64>)
-    ),
-    opt!(alt!(tag!("ULL") | tag!("LL") | tag!("UL") | tag!("L") | tag!("U")))
-));
+named!(
+    integer<u64>,
+    terminated!(
+        alt_complete!(
+            complete!(preceded!(
+                tag_no_case!("0x"),
+                map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>)
+            )) | preceded!(
+                tag_no_case!("0"),
+                map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u64>)
+            ) | map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u64>)
+        ),
+        opt!(alt!(
+            tag!("ULL") | tag!("LL") | tag!("UL") | tag!("L") | tag!("U")
+        ))
+    )
+);
 
 fn is_prop_node_char(c: u8) -> bool {
-    is_alphanumeric(c) || c == b',' || c == b'.' || c == b'_' || c == b'+' || c == b'*' ||
-    c == b'#' || c == b'?' || c == b'@' || c == b'-'
+    is_alphanumeric(c)
+        || c == b','
+        || c == b'.'
+        || c == b'_'
+        || c == b'+'
+        || c == b'*'
+        || c == b'#'
+        || c == b'?'
+        || c == b'@'
+        || c == b'-'
 }
 
 fn is_path_char(c: u8) -> bool {
@@ -394,43 +483,66 @@ fn is_label_char(c: u8) -> bool {
     is_alphanumeric(c) || c == b'_'
 }
 
-named!(parse_label<String>,
-    map!(map_res!(
-        recognize!(preceded!(alt!(alpha | tag!("_")), take_while!(is_label_char))),
-    str::from_utf8), String::from)
+named!(
+    parse_label<String>,
+    map!(
+        map_res!(
+            recognize!(preceded!(
+                alt!(alpha | tag!("_")),
+                take_while!(is_label_char)
+            )),
+            str::from_utf8
+        ),
+        String::from
+    )
 );
 
-named!(parse_ref<String>, alt!(
-    preceded!(
-        char!('&'),
-        delimited!(
-            char!('{'),
-            map!(map_res!(take_while1!(is_path_char), str::from_utf8), String::from),
-            char!('}')
+named!(
+    parse_ref<String>,
+    alt!(
+        preceded!(
+            char!('&'),
+            delimited!(
+                char!('{'),
+                map!(
+                    map_res!(take_while1!(is_path_char), str::from_utf8),
+                    String::from
+                ),
+                char!('}')
+            )
+        ) | preceded!(
+            char!('&'),
+            map!(
+                map_res!(take_while1!(is_label_char), str::from_utf8),
+                String::from
+            )
         )
-    ) |
-    preceded!(
-        char!('&'),
-        map!(map_res!(take_while1!(is_label_char), str::from_utf8), String::from)
     )
-));
+);
 
-named!(transform<Vec<u8>>, escaped_transform!(take_until_either!("\\\""), '\\', alt!(
-    tag!("a")   => { |_| vec![b'\x07'] } |
-    tag!("b")   => { |_| vec![b'\x08'] } |
-    tag!("t")   => { |_| vec![b'\t'] } |
-    tag!("n")   => { |_| vec![b'\n'] } |
-    tag!("v")   => { |_| vec![b'\x0B'] } |
-    tag!("f")   => { |_| vec![b'\x0C'] } |
-    tag!("r")   => { |_| vec![b'\r'] } |
-    tag!("\\")  => { |_| vec![b'\\'] } |
-    tag!("\"")  => { |_| vec![b'\"'] } |
-    preceded!(
-        tag_no_case!("x"),
-        map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u8>)
-    ) => { |c| vec![c] } |
-    map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u8>) => { |c| vec![c] }
-)));
+named!(
+    transform<Vec<u8>>,
+    escaped_transform!(
+        take_until_either!("\\\""),
+        '\\',
+        alt!(
+            tag!("a")   => { |_| vec![b'\x07'] } |
+            tag!("b")   => { |_| vec![b'\x08'] } |
+            tag!("t")   => { |_| vec![b'\t'] } |
+            tag!("n")   => { |_| vec![b'\n'] } |
+            tag!("v")   => { |_| vec![b'\x0B'] } |
+            tag!("f")   => { |_| vec![b'\x0C'] } |
+            tag!("r")   => { |_| vec![b'\r'] } |
+            tag!("\\")  => { |_| vec![b'\\'] } |
+            tag!("\"")  => { |_| vec![b'\"'] } |
+            preceded!(
+                tag_no_case!("x"),
+                map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u8>)
+            ) => { |c| vec![c] } |
+            map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u8>) => { |c| vec![c] }
+        )
+    )
+);
 
 named_attr!(#[doc =
 "Parse a slice of bytes as a `String`, replacing escape codes with the
@@ -493,50 +605,65 @@ named_args!(parse_cell(bits: usize)<Cell>,
     )
 );
 
-named!(parse_mem_reserve<ReserveInfo>, comments_ws!(do_parse!(
-    labels: many0!(terminated!(parse_label, char!(':'))) >>
-    tag!("/memreserve/") >>
-    addr: parse_c_expr >>
-    size: parse_c_expr >>
-    char!(';') >>
-    (ReserveInfo { address: addr, size: size, labels: labels })
-)));
+named!(
+    parse_mem_reserve<ReserveInfo>,
+    comments_ws!(do_parse!(
+        labels: many0!(terminated!(parse_label, char!(':')))
+            >> tag!("/memreserve/")
+            >> addr: parse_c_expr
+            >> size: parse_c_expr
+            >> char!(';')
+            >> (ReserveInfo {
+                address: addr,
+                size: size,
+                labels: labels
+            })
+    ))
+);
 
-named!(parse_data_cells<Data>, do_parse!(
-    bits: verify!(
-        map!(opt!(complete!(comments_ws!(preceded!(
-            tag!("/bits/"),
-            flat_map!(take_until!("<"), integer)
-        )))), |b: Option<u64>| b.unwrap_or(32)),
-    |b| b == 8 || b == 16 || b == 32 || b == 64 ) >>
-    val: delimited!(
-        comments_ws!(char!('<')),
+named!(
+    parse_data_cells<Data>,
+    do_parse!(
+        bits: verify!(
+            map!(
+                opt!(complete!(comments_ws!(preceded!(
+                    tag!("/bits/"),
+                    flat_map!(take_until!("<"), integer)
+                )))),
+                |b: Option<u64>| b.unwrap_or(32)
+            ),
+            |b| b == 8 || b == 16 || b == 32 || b == 64
+        ) >> val: delimited!(
+            comments_ws!(char!('<')),
             separated_list!(eat_junk, call!(parse_cell, bits as usize)),
-        comments_ws!(char!('>'))
-    ) >>
-    ( Data::Cells(bits as usize, val) )
-));
+            comments_ws!(char!('>'))
+        ) >> (Data::Cells(bits as usize, val))
+    )
+);
 
 // TODO: labels in data - issue 6
 // TODO: include binary - issue 7
-named!(parse_data<Data>, comments_ws!(alt!(
-    delimited!(
-        char!('"'),
-        map!(escape_c_string, |s| Data::String(s)),
-        char!('"')
-    ) |
-    call!(parse_data_cells) |
-    delimited!(
-        char!('['),
-        do_parse!(
-            val: many1!(map_res!(map_res!(
-                    comments_ws!(take!(2)), str::from_utf8), from_str_hex::<u8>)) >>
-            (Data::ByteArray(val))
-        ),
-        char!(']')
-    ) |
-    map!(parse_ref, |x| (Data::Reference(x, None)))
-)));
+named!(
+    parse_data<Data>,
+    comments_ws!(alt!(
+        delimited!(
+            char!('"'),
+            map!(escape_c_string, |s| Data::String(s)),
+            char!('"')
+        ) | call!(parse_data_cells)
+            | delimited!(
+                char!('['),
+                do_parse!(
+                    val: many1!(map_res!(
+                        map_res!(comments_ws!(take!(2)), str::from_utf8),
+                        from_str_hex::<u8>
+                    )) >> (Data::ByteArray(val))
+                ),
+                char!(']')
+            )
+            | map!(parse_ref, |x| (Data::Reference(x, None)))
+    ))
+);
 
 named_args!(parse_prop(input_len: usize)<Property>, comments_ws!(alt!(
     do_parse!(
@@ -666,7 +793,7 @@ pub enum ParseResult<'a> {
     /// following nodes, and a slice containing the remainder of the buffer.
     /// Having left over output after parsing is generally not expected and in
     /// most cases should be considered an error.
-    RemainingInput(DTInfo, Vec<Node>, &'a [u8])
+    RemainingInput(DTInfo, Vec<Node>, &'a [u8]),
 }
 
 /// Parses the slice of `u8`s as ASCII characters and returns a device tree made
@@ -735,7 +862,10 @@ mod tests {
                 &b""[..],
                 Property::Existing {
                     name: "cell_prop".to_owned(),
-                    val: Some(vec![Data::Cells(32, vec![Cell::Num(1), Cell::Num(2), Cell::Num(10)])]),
+                    val: Some(vec![Data::Cells(
+                        32,
+                        vec![Cell::Num(1), Cell::Num(2), Cell::Num(10)]
+                    )]),
                     labels: Vec::new(),
                     offset: 0,
                 }
@@ -753,9 +883,9 @@ mod tests {
                 Property::Existing {
                     name: "string_prop".to_owned(),
                     val: Some(vec![
-                            Data::String("string".to_owned()),
-                            Data::String("string2".to_owned())
-                         ]),
+                        Data::String("string".to_owned()),
+                        Data::String("string2".to_owned())
+                    ]),
                     labels: Vec::new(),
                     offset: 0,
                 }
@@ -810,7 +940,10 @@ mod tests {
                 &b""[..],
                 Property::Existing {
                     name: "test_prop".to_owned(),
-                    val: Some(vec![Data::Cells(32, vec![Cell::Num(1), Cell::Num(2), Cell::Num(10)])]),
+                    val: Some(vec![Data::Cells(
+                        32,
+                        vec![Cell::Num(1), Cell::Num(2), Cell::Num(10)]
+                    )]),
                     labels: Vec::new(),
                     offset: 0,
                 }
@@ -827,7 +960,10 @@ mod tests {
                 &b""[..],
                 Property::Existing {
                     name: "test_prop".to_owned(),
-                    val: Some(vec![Data::Cells(32, vec![Cell::Num(1), Cell::Num(2), Cell::Num(10)])]),
+                    val: Some(vec![Data::Cells(
+                        32,
+                        vec![Cell::Num(1), Cell::Num(2), Cell::Num(10)]
+                    )]),
                     labels: Vec::new(),
                     offset: 0,
                 }
@@ -850,10 +986,7 @@ mod tests {
     fn data_string_empty() {
         assert_eq!(
             parse_data(b"\"\""),
-            IResult::Done(
-                &b""[..],
-                Data::String("".to_owned())
-            )
+            IResult::Done(&b""[..], Data::String("".to_owned()))
         );
     }
 
@@ -861,10 +994,20 @@ mod tests {
     fn data_cell_sized_8_escapes() {
         assert_eq!(
             parse_data(b"/bits/ 8 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xde>"),
-            IResult::Done(&b""[..], Data::Cells(8, vec![
-                Cell::Num(b'\r' as u64), Cell::Num(b'b' as u64), Cell::Num(0),
-                Cell::Num(b'\'' as u64), Cell::Num(0xFF), Cell::Num(0xDE)
-            ]))
+            IResult::Done(
+                &b""[..],
+                Data::Cells(
+                    8,
+                    vec![
+                        Cell::Num(b'\r' as u64),
+                        Cell::Num(b'b' as u64),
+                        Cell::Num(0),
+                        Cell::Num(b'\'' as u64),
+                        Cell::Num(0xFF),
+                        Cell::Num(0xDE)
+                    ]
+                )
+            )
         );
     }
 
@@ -872,10 +1015,20 @@ mod tests {
     fn data_cell_sized_16_escapes() {
         assert_eq!(
             parse_data(b"/bits/ 16 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdead>"),
-            IResult::Done(&b""[..], Data::Cells(16, vec![
-                Cell::Num(b'\r' as u64), Cell::Num(b'b' as u64), Cell::Num(0),
-                Cell::Num(b'\'' as u64), Cell::Num(0xFF), Cell::Num(0xDEAD)
-            ]))
+            IResult::Done(
+                &b""[..],
+                Data::Cells(
+                    16,
+                    vec![
+                        Cell::Num(b'\r' as u64),
+                        Cell::Num(b'b' as u64),
+                        Cell::Num(0),
+                        Cell::Num(b'\'' as u64),
+                        Cell::Num(0xFF),
+                        Cell::Num(0xDEAD)
+                    ]
+                )
+            )
         );
     }
 
@@ -883,10 +1036,20 @@ mod tests {
     fn data_cell_sized_32_escapes() {
         assert_eq!(
             parse_data(b"/bits/ 32 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdeadbeef>"),
-            IResult::Done(&b""[..], Data::Cells(32, vec![
-                Cell::Num(b'\r' as u64), Cell::Num(b'b' as u64), Cell::Num(0),
-                Cell::Num(b'\'' as u64), Cell::Num(0xFF), Cell::Num(0xDEADBEEF)
-            ]))
+            IResult::Done(
+                &b""[..],
+                Data::Cells(
+                    32,
+                    vec![
+                        Cell::Num(b'\r' as u64),
+                        Cell::Num(b'b' as u64),
+                        Cell::Num(0),
+                        Cell::Num(b'\'' as u64),
+                        Cell::Num(0xFF),
+                        Cell::Num(0xDEADBEEF)
+                    ]
+                )
+            )
         );
     }
 
@@ -894,10 +1057,20 @@ mod tests {
     fn data_cell_sized_64_escapes() {
         assert_eq!(
             parse_data(b"/bits/ 64 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdeadbeef00000000>"),
-            IResult::Done(&b""[..], Data::Cells(64, vec![
-                Cell::Num(b'\r' as u64), Cell::Num(b'b' as u64), Cell::Num(0),
-                Cell::Num(b'\'' as u64), Cell::Num(0xFF), Cell::Num(0xDEADBEEF00000000)
-            ]))
+            IResult::Done(
+                &b""[..],
+                Data::Cells(
+                    64,
+                    vec![
+                        Cell::Num(b'\r' as u64),
+                        Cell::Num(b'b' as u64),
+                        Cell::Num(0),
+                        Cell::Num(b'\'' as u64),
+                        Cell::Num(0xFF),
+                        Cell::Num(0xDEADBEEF00000000)
+                    ]
+                )
+            )
         );
     }
 
@@ -905,7 +1078,10 @@ mod tests {
     fn data_cell_sized_default() {
         assert_eq!(
             parse_data(b"<0x12345678 0x0000ffff>"),
-            IResult::Done(&b""[..], Data::Cells(32, vec![Cell::Num(0x12345678), Cell::Num(0x0000FFFF)]))
+            IResult::Done(
+                &b""[..],
+                Data::Cells(32, vec![Cell::Num(0x12345678), Cell::Num(0x0000FFFF)])
+            )
         );
     }
 
@@ -913,16 +1089,25 @@ mod tests {
     fn data_cell_sized_16() {
         assert_eq!(
             parse_data(b"/bits/ 16 <0x1234 0x5678 0x0 0xffff>"),
-            IResult::Done(&b""[..], Data::Cells(16,
-                vec![Cell::Num(0x1234), Cell::Num(0x5678), Cell::Num(0), Cell::Num(0xFFFF)]
-            ))
+            IResult::Done(
+                &b""[..],
+                Data::Cells(
+                    16,
+                    vec![
+                        Cell::Num(0x1234),
+                        Cell::Num(0x5678),
+                        Cell::Num(0),
+                        Cell::Num(0xFFFF)
+                    ]
+                )
+            )
         );
     }
 
     #[test]
     fn data_cell_sized_incorrect() {
         match parse_data(b"/bits/ 16 <0x12345678 0x0000ffff>") {
-            IResult::Error(_) => {},
+            IResult::Error(_) => {}
             x => panic!(format!("parse_data did not return error: {:?}", x)),
         }
     }
@@ -930,7 +1115,7 @@ mod tests {
     #[test]
     fn data_cell_sized_incorrect_ref() {
         match parse_data(b"/bits/ 16 <&ref>") {
-            IResult::Error(_) => {},
+            IResult::Error(_) => {}
             x => panic!(format!("parse_data did not return error: {:?}", x)),
         }
     }
@@ -939,7 +1124,10 @@ mod tests {
     fn data_cell_ref() {
         assert_eq!(
             parse_data(b"<&ref>"),
-            IResult::Done(&b""[..], Data::Cells(32, vec![Cell::Ref("ref".to_owned(), None)]))
+            IResult::Done(
+                &b""[..],
+                Data::Cells(32, vec![Cell::Ref("ref".to_owned(), None)])
+            )
         );
     }
 
@@ -953,18 +1141,12 @@ mod tests {
 
     #[test]
     fn integer_1() {
-        assert_eq!(
-            parse_c_expr(b"(64)"),
-            IResult::Done(&b""[..], 64)
-        );
+        assert_eq!(parse_c_expr(b"(64)"), IResult::Done(&b""[..], 64));
     }
 
     #[test]
     fn integer_2() {
-        assert_eq!(
-            parse_c_expr(b"(1 << 5)"),
-            IResult::Done(&b""[..], 32)
-        );
+        assert_eq!(parse_c_expr(b"(1 << 5)"), IResult::Done(&b""[..], 32));
     }
 
     #[test]
@@ -977,10 +1159,7 @@ mod tests {
 
     #[test]
     fn integer_4() {
-        assert_eq!(
-            parse_c_expr(b"((((50))))"),
-            IResult::Done(&b""[..], 50)
-        );
+        assert_eq!(parse_c_expr(b"((((50))))"), IResult::Done(&b""[..], 50));
     }
 
     #[test]
@@ -1011,7 +1190,10 @@ mod tests {
     fn math_cell_2() {
         assert_eq!(
             parse_data(b"< ((((0x910)) & 0xffff) - (0x800)) (0 | 3) >"),
-            IResult::Done(&b""[..], Data::Cells(32, vec![Cell::Num(272), Cell::Num(3)]))
+            IResult::Done(
+                &b""[..],
+                Data::Cells(32, vec![Cell::Num(272), Cell::Num(3)])
+            )
         );
     }
 }

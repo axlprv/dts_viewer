@@ -5,18 +5,20 @@ extern crate mktemp;
 
 mod change_tracker;
 
-use std::process::Command;
-use std::path::{Path, PathBuf};
+use std::fmt::{self, Display, Formatter};
 use std::io::{self, BufRead, Write};
 use std::iter::Iterator;
-use std::fmt::{self, Display, Formatter};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use mktemp::Temp;
 
-use device_tree_source::parser::{ParseResult, parse_dt};
+use device_tree_source::include::{
+    get_bounds_containing_offset, include_files, BoundsError, IncludeBounds, IncludeError,
+    IncludeMethod,
+};
+use device_tree_source::parser::{parse_dt, ParseResult};
 use device_tree_source::tree::Offset;
-use device_tree_source::include::{IncludeBounds, IncludeMethod, IncludeError, BoundsError,
-                                  include_files, get_bounds_containing_offset};
 
 use change_tracker::LabelStore;
 
@@ -37,21 +39,22 @@ use change_tracker::LabelStore;
 //  Oh, and somehow display the damn information
 fn main() {
     let matches = clap_app!(dts_viewer =>
-            (version: crate_version!())
-            (author: "Gabriel S. <ga29smith@gmail.com>")
-            (@arg file: +required "DTS file to parse")
-            (@arg no_defaults: -n --no_defaults "Disable default includes. \
-                An 'include' directory, if it exists, is automatically included")
-            (@arg include: -I ... +takes_value "Additional files to pass to CPP as an include")
-        )
-        .get_matches();
+        (version: crate_version!())
+        (author: "Gabriel S. <ga29smith@gmail.com>")
+        (@arg file: +required "DTS file to parse")
+        (@arg no_defaults: -n --no_defaults "Disable default includes. \
+            An 'include' directory, if it exists, is automatically included")
+        (@arg include: -I ... +takes_value "Additional files to pass to CPP as an include")
+    )
+    .get_matches();
 
     let file_name = matches.value_of("file").unwrap();
     let mut cpp_temp_out = Temp::new_file().expect("Could not create temp file");
     let mut include_dirs = Vec::new();
 
     let mut cpp_command = Command::new("gcc");
-    cpp_command.args(&["-E", "-nostdinc"])
+    cpp_command
+        .args(&["-E", "-nostdinc"])
         .args(&["-undef", "-D__DTS__", "-x", "assembler-with-cpp"])
         .args(&["-o", cpp_temp_out.as_ref().to_str().unwrap()])
         .arg(&file_name);
@@ -108,13 +111,17 @@ fn main() {
                         println!(" {}", path.display());
                     }
                 }
-                IncludeError::LinemarkerInDtsi(path) =>
-                    println!("Extraneous linemarker found in DT include: {}",
-                             path.to_string_lossy()),
-                IncludeError::ParseError(_) =>
-                    println!("Failed to convert line to byte offset for bounds tracking."),
-                IncludeError::NoBoundReturned(path) =>
-                    println!("No bounds returned after parsing file: {}", path.to_string_lossy()),
+                IncludeError::LinemarkerInDtsi(path) => println!(
+                    "Extraneous linemarker found in DT include: {}",
+                    path.to_string_lossy()
+                ),
+                IncludeError::ParseError(_) => {
+                    println!("Failed to convert line to byte offset for bounds tracking.")
+                }
+                IncludeError::NoBoundReturned(path) => println!(
+                    "No bounds returned after parsing file: {}",
+                    path.to_string_lossy()
+                ),
             }
             return;
         }
@@ -137,7 +144,10 @@ fn main() {
     let (dt_info, amends) = match parse_dt(&buffer) {
         Ok(ParseResult::Complete(dt_info, amends)) => (dt_info, amends),
         Ok(ParseResult::RemainingInput(dt_info, amends, rem)) => {
-            println!("Input remaining after parsing:\n\"{}\"", String::from_utf8_lossy(rem));
+            println!(
+                "Input remaining after parsing:\n\"{}\"",
+                String::from_utf8_lossy(rem)
+            );
             (dt_info, amends)
         }
         Err(err) => {
@@ -157,7 +167,10 @@ fn main() {
 
         let mut line = String::new();
         let stdin = io::stdin();
-        stdin.lock().read_line(&mut line).expect("Error reading from stdin");
+        stdin
+            .lock()
+            .read_line(&mut line)
+            .expect("Error reading from stdin");
         let line = line.trim();
 
         if line.is_empty() {
@@ -203,18 +216,20 @@ fn main() {
                                         println!(", Line: {}, Column: {}", line, col)
                                     }
                                     Err(err) => match err {
-                                        BoundsError::ParseError(_) =>
-                                            println!("Offset ({}) could not be converted to line.",
-                                                     offset),
-                                        BoundsError::IOError(..) =>
-                                            println!("Failed to open file: {}",
-                                                     bound.child_path().to_string_lossy()),
-                                        BoundsError::NotWithinBounds =>
-                                            println!("File offset ({}) was supposed to be in\
+                                        BoundsError::ParseError(_) => println!(
+                                            "Offset ({}) could not be converted to line.",
+                                            offset
+                                        ),
+                                        BoundsError::IOError(..) => println!(
+                                            "Failed to open file: {}",
+                                            bound.child_path().to_string_lossy()
+                                        ),
+                                        BoundsError::NotWithinBounds => println!(
+                                            "File offset ({}) was supposed to be in\
                                                          bound. {:?}",
-                                                     offset,
-                                                     bound),
-                                    }
+                                            offset, bound
+                                        ),
+                                    },
                                 }
                             }
                             Err(_) => println!("-- Could not find file for offset {}", offset),
@@ -245,8 +260,10 @@ impl IncludeTree {
             };
 
             //TODO: we don't really need the filter, benchmark speed w/wo
-            for sub_bounds in bounds.split(|b| b.child_path() == first.child_path())
-                                    .filter(|s| !s.is_empty()) {
+            for sub_bounds in bounds
+                .split(|b| b.child_path() == first.child_path())
+                .filter(|s| !s.is_empty())
+            {
                 if let Some(sub_tree) = Self::bounds_to_tree(sub_bounds) {
                     tree.includes.push(sub_tree);
                 }

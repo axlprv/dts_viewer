@@ -2,16 +2,16 @@
 //! execution of Device Tree `/include/` statements as well as the mapping from
 //! the global buffer returned by `include_files` back to the original file.
 
-use std::str::{self, FromStr};
-use std::path::{PathBuf, Path};
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, Read};
-use std::cmp::Ordering;
+use std::path::{Path, PathBuf};
+use std::str::{self, FromStr};
 
-use nom::{IResult, ErrorKind, Needed, FindSubstring, digit, space, multispace, line_ending};
+use nom::{digit, line_ending, multispace, space, ErrorKind, FindSubstring, IResult, Needed};
 
 use parser::escape_c_string;
-use ::{byte_offset_to_line_col, line_to_byte_offset};
+use {byte_offset_to_line_col, line_to_byte_offset};
 
 /// Defines errors from manipulating `IncludeBounds`.
 // TODO: impl Display and Error - issue 1.2
@@ -25,7 +25,7 @@ pub enum BoundsError {
     IOError(io::Error, Option<PathBuf>),
     /// Some `ParseError`. Probably from a failed attempt to convert from lines
     /// to byte offsets.
-    ParseError(::ParseError)
+    ParseError(::ParseError),
 }
 
 impl From<io::Error> for BoundsError {
@@ -55,7 +55,7 @@ pub enum IncludeError {
     IOError(io::Error, Option<PathBuf>),
     /// Some `ParseError`. Probably from a failed attempt to convert from lines
     /// to byte offsets.
-    ParseError(::ParseError)
+    ParseError(::ParseError),
 }
 
 impl From<io::Error> for IncludeError {
@@ -194,30 +194,33 @@ impl IncludeBounds {
     /// Returns `ParseError` on failure to convert offset to line
     /// and column.
     /// Returns `IOError` on failure to open a file.
-    pub fn file_line_from_global(&self,
-                                 global_buffer: &[u8],
-                                 offset: usize)
-                                 -> Result<(usize, usize), BoundsError> {
+    pub fn file_line_from_global(
+        &self,
+        global_buffer: &[u8],
+        offset: usize,
+    ) -> Result<(usize, usize), BoundsError> {
         if offset >= self.global_start && offset < self.end() {
             match self.method {
                 IncludeMethod::DTS => {
                     let b = match File::open(&self.path) {
-                            Ok(f) => f,
-                            Err(e) => return Err(BoundsError::IOError(e, Some(self.path.to_owned()))),
-                        }
-                        .bytes().filter_map(|e| e.ok());
+                        Ok(f) => f,
+                        Err(e) => return Err(BoundsError::IOError(e, Some(self.path.to_owned()))),
+                    }
+                    .bytes()
+                    .filter_map(|e| e.ok());
                     byte_offset_to_line_col(b, offset - self.global_start + self.child_start)
-                                            .map_err(|e| e.into())
+                        .map_err(|e| e.into())
                 }
                 IncludeMethod::CPP => {
                     let (g_line, g_col) = byte_offset_to_line_col(global_buffer.iter(), offset)?;
-                    let (s_line, s_col) = byte_offset_to_line_col(global_buffer.iter(),
-                                                                  self.global_start)?;
+                    let (s_line, s_col) =
+                        byte_offset_to_line_col(global_buffer.iter(), self.global_start)?;
                     let b = match File::open(&self.path) {
-                            Ok(f) => f,
-                            Err(e) => return Err(BoundsError::IOError(e, Some(self.path.to_owned()))),
-                        }
-                        .bytes().filter_map(|e| e.ok());
+                        Ok(f) => f,
+                        Err(e) => return Err(BoundsError::IOError(e, Some(self.path.to_owned()))),
+                    }
+                    .bytes()
+                    .filter_map(|e| e.ok());
                     let (c_line, c_col) = byte_offset_to_line_col(b, self.child_start)?;
 
                     // println!();
@@ -247,9 +250,10 @@ impl IncludeBounds {
 ///
 /// # Errors
 /// Returns `NotWithinBounds` if the `IncludeBounds` containing the offset cannot be found.
-pub fn get_bounds_containing_offset(bounds: &[IncludeBounds],
-                                        offset: usize)
-                                        -> Result<&IncludeBounds, BoundsError> {
+pub fn get_bounds_containing_offset(
+    bounds: &[IncludeBounds],
+    offset: usize,
+) -> Result<&IncludeBounds, BoundsError> {
     match bounds.binary_search_by(|b| {
         use std::cmp::Ordering::*;
         match (b.start().cmp(&offset), b.end().cmp(&offset)) {
@@ -279,31 +283,31 @@ enum LinemarkerFlag {
     Extern,
 }
 
-named!(parse_linemarker<Linemarker>,
+named!(
+    parse_linemarker<Linemarker>,
     complete!(do_parse!(
-        tag!("#") >>
-        opt!(tag!("line")) >>
-        space >>
-        line: map_res!(map_res!(digit, str::from_utf8), usize::from_str) >>
-        space >>
-        path: delimited!(
-            char!('"'),
-            map!(escape_c_string, PathBuf::from),
-            char!('"')
-        ) >>
-        flag: opt!(preceded!(space, map_res!(map_res!(digit, str::from_utf8), u64::from_str))) >>
-        line_ending >>
-        (Linemarker {
-            child_line: line,
-            path: path,
-            flag: flag.map(|f| match f {
-                1 => LinemarkerFlag::Start,
-                2 => LinemarkerFlag::Return,
-                3 => LinemarkerFlag::System,
-                4 => LinemarkerFlag::Extern,
-                _ => unreachable!(),
-            }),
-        })
+        tag!("#")
+            >> opt!(tag!("line"))
+            >> space
+            >> line: map_res!(map_res!(digit, str::from_utf8), usize::from_str)
+            >> space
+            >> path: delimited!(char!('"'), map!(escape_c_string, PathBuf::from), char!('"'))
+            >> flag: opt!(preceded!(
+                space,
+                map_res!(map_res!(digit, str::from_utf8), u64::from_str)
+            ))
+            >> line_ending
+            >> (Linemarker {
+                child_line: line,
+                path: path,
+                flag: flag.map(|f| match f {
+                    1 => LinemarkerFlag::Start,
+                    2 => LinemarkerFlag::Return,
+                    3 => LinemarkerFlag::System,
+                    4 => LinemarkerFlag::Extern,
+                    _ => unreachable!(),
+                }),
+            })
     ))
 );
 
@@ -311,28 +315,29 @@ fn find_linemarker_start(input: &[u8]) -> IResult<&[u8], &[u8]> {
     if "# ".len() > input.len() {
         IResult::Incomplete(Needed::Size("# ".len()))
     } else {
-        match input.find_substring("# ").iter().chain(input.find_substring("#line ").iter()).min() {
-            None => {
-                IResult::Error(error_position!(ErrorKind::TakeUntil, input))
-            },
-            Some(index) => {
-                IResult::Done(&input[*index..], &input[0..*index])
-            },
+        match input
+            .find_substring("# ")
+            .iter()
+            .chain(input.find_substring("#line ").iter())
+            .min()
+        {
+            None => IResult::Error(error_position!(ErrorKind::TakeUntil, input)),
+            Some(index) => IResult::Done(&input[*index..], &input[0..*index]),
         }
     }
 }
 
-named!(find_linemarker<(&[u8], Linemarker)>, do_parse!(
-    pre: find_linemarker_start >>
-    marker: parse_linemarker >>
-    (pre, marker)
-));
+named!(
+    find_linemarker<(&[u8], Linemarker)>,
+    do_parse!(pre: find_linemarker_start >> marker: parse_linemarker >> (pre, marker))
+);
 
-fn parse_linemarkers(buf: &[u8],
-                     bounds: &mut Vec<IncludeBounds>,
-                     global_offset: usize,
-                     post_len: usize)
-                     -> Result<(), IncludeError> {
+fn parse_linemarkers(
+    buf: &[u8],
+    bounds: &mut Vec<IncludeBounds>,
+    global_offset: usize,
+    post_len: usize,
+) -> Result<(), IncludeError> {
     let end_offset = global_offset + buf.len();
     // println!("{}", String::from_utf8_lossy(buf));
     let mut buf = buf;
@@ -346,9 +351,10 @@ fn parse_linemarkers(buf: &[u8],
         // println!("{:#?}", bounds);
         // double check that last bound was from a linemarker
         match bounds.last_mut() {
-            Some(ref mut bound) if bound.method == IncludeMethod::CPP => { bound.len = pre.len() }
-            Some(&mut IncludeBounds{ ref path, .. }) =>
-                return Err(IncludeError::LinemarkerInDtsi(path.to_owned())),
+            Some(ref mut bound) if bound.method == IncludeMethod::CPP => bound.len = pre.len(),
+            Some(&mut IncludeBounds { ref path, .. }) => {
+                return Err(IncludeError::LinemarkerInDtsi(path.to_owned()))
+            }
             None => unreachable!(),
         }
 
@@ -372,23 +378,22 @@ fn parse_linemarkers(buf: &[u8],
     Ok(())
 }
 
-named!(parse_include<String>, complete!(preceded!(
-    tag!("/include/"),
-    preceded!( multispace,
-        delimited!(
-            char!('"'),
-            escape_c_string,
-            char!('"')
-        ))
-)));
+named!(
+    parse_include<String>,
+    complete!(preceded!(
+        tag!("/include/"),
+        preceded!(
+            multispace,
+            delimited!(char!('"'), escape_c_string, char!('"'))
+        )
+    ))
+);
 
 fn find_include(buf: &[u8]) -> Option<(&[u8], PathBuf, &[u8])> {
     for (index, win) in buf.windows("/include/".len()).enumerate() {
         if win == b"/include/" {
             match parse_include(&buf[index..]) {
-                IResult::Done(rem, file) => {
-                    return Some((&buf[..index], PathBuf::from(file), rem))
-                }
+                IResult::Done(rem, file) => return Some((&buf[..index], PathBuf::from(file), rem)),
                 IResult::Error(_) => {}
                 IResult::Incomplete(_) => unreachable!(),
             }
@@ -406,7 +411,7 @@ fn find_include(buf: &[u8]) -> Option<(&[u8], PathBuf, &[u8])> {
 /// `IncludeBounds::file_line_from_global` for more information. The
 /// `IncludeBounds` can be ignored if mapping from the final buffer to the
 /// original file is not needed.
-/// 
+///
 /// If C style `#include` statements need to be parsed that step should be
 /// performed, usually by running CPP, before calling this function on the file
 /// output from that step.
@@ -424,11 +429,15 @@ fn find_include(buf: &[u8]) -> Option<(&[u8], PathBuf, &[u8])> {
 /// Returns `LinemarkerInDtsi` if a C preprocessor linemarker is found within a
 /// file included by an `/include/` statement. This should never happen, and if
 /// it does that file needs to be cleaned up.
-pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]) -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
-    fn _include_files(path: &Path,
-                      include_dirs: &[&Path],
-                      main_offset: usize)
-                      -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
+pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(
+    file: P,
+    include_dirs: &[I],
+) -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
+    fn _include_files(
+        path: &Path,
+        include_dirs: &[&Path],
+        main_offset: usize,
+    ) -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
         fn find_file(path: &Path, include_dirs: &[&Path]) -> Result<PathBuf, IncludeError> {
             for dir in include_dirs.iter() {
                 let p = dir.join(path);
@@ -436,7 +445,10 @@ pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]
                     return Ok(p);
                 }
             }
-            Err(IncludeError::IOError(io::Error::from(io::ErrorKind::NotFound), Some(path.to_owned())))
+            Err(IncludeError::IOError(
+                io::Error::from(io::ErrorKind::NotFound),
+                Some(path.to_owned()),
+            ))
         }
         let path = find_file(path, include_dirs)?;
         let mut file = match File::open(&path) {
@@ -454,11 +466,12 @@ pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]
 
         let mut buf = string_buffer.as_bytes();
 
-        named!(first_linemarker<(&[u8], Linemarker)>,
+        named!(
+            first_linemarker<(&[u8], Linemarker)>,
             do_parse!(
-                marker: peek!(parse_linemarker) >>
-                line: recognize!(parse_linemarker) >>
-                (line, marker)
+                marker: peek!(parse_linemarker)
+                    >> line: recognize!(parse_linemarker)
+                    >> (line, marker)
             )
         );
 
@@ -468,17 +481,21 @@ pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]
                 global_start: buf.len() - rem.len(),
                 child_start: {
                     let b = match File::open(&marker.path) {
-                            Ok(f) => f,
-                            Err(e) => return Err(IncludeError::IOError(e, Some(marker.path.to_owned()))),
+                        Ok(f) => f,
+                        Err(e) => {
+                            return Err(IncludeError::IOError(e, Some(marker.path.to_owned())))
                         }
-                        .bytes().filter_map(|e| e.ok());
+                    }
+                    .bytes()
+                    .filter_map(|e| e.ok());
                     line_to_byte_offset(b, marker.child_line)?
                 },
                 len: match File::open(&marker.path) {
-                        Ok(f) => f,
-                        Err(e) => return Err(IncludeError::IOError(e, Some(marker.path.to_owned()))),
-                    }
-                    .bytes().count(),
+                    Ok(f) => f,
+                    Err(e) => return Err(IncludeError::IOError(e, Some(marker.path.to_owned()))),
+                }
+                .bytes()
+                .count(),
                 method: IncludeMethod::CPP,
             };
 
@@ -493,10 +510,11 @@ pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]
                 global_start: main_offset,
                 child_start: 0,
                 len: match File::open(&path) {
-                        Ok(f) => f,
-                        Err(e) => return Err(IncludeError::IOError(e, Some(path.to_owned()))),
-                    }
-                    .bytes().count(),
+                    Ok(f) => f,
+                    Err(e) => return Err(IncludeError::IOError(e, Some(path.to_owned()))),
+                }
+                .bytes()
+                .count(),
                 method: IncludeMethod::DTS,
             }
         };
@@ -516,14 +534,14 @@ pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]
             let (sub_buf, sub_bounds) = _include_files(&included_path, include_dirs, total_len)?;
             buffer.extend(sub_buf);
 
-            let inc_start = sub_bounds.first()
-                                      .map(|b| b.global_start)
-                                      .ok_or_else(||
-                                          IncludeError::NoBoundReturned(included_path.clone()))?;
-            let inc_end = sub_bounds.last()
-                                    .map(|b| b.end())
-                                    .ok_or_else(||
-                                          IncludeError::NoBoundReturned(included_path.clone()))?;
+            let inc_start = sub_bounds
+                .first()
+                .map(|b| b.global_start)
+                .ok_or_else(|| IncludeError::NoBoundReturned(included_path.clone()))?;
+            let inc_end = sub_bounds
+                .last()
+                .map(|b| b.end())
+                .ok_or_else(|| IncludeError::NoBoundReturned(included_path.clone()))?;
             let eaten_len = (buf.len() - offset) - rem.len();
 
             // println!("{:#?}", sub_bounds);
@@ -544,9 +562,11 @@ pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]
         Ok((buffer, bounds))
     }
 
-    _include_files(file.as_ref(),
-                   &include_dirs.iter().map(|p| p.as_ref()).collect::<Vec<_>>(),
-                   0)
+    _include_files(
+        file.as_ref(),
+        &include_dirs.iter().map(|p| p.as_ref()).collect::<Vec<_>>(),
+        0,
+    )
 }
 
 #[cfg(test)]

@@ -1,8 +1,8 @@
 //! Contains the structures that represent the device tree.
 
-use std::fmt;
-use std::collections::HashMap;
 use std::collections::hash_map::{Entry, RandomState};
+use std::collections::HashMap;
+use std::fmt;
 
 /// Trait applied to all data structures in a device tree that can have a
 /// label/alias.
@@ -94,26 +94,26 @@ impl DTInfo {
     pub fn get_node_by_path<'a>(&'a self, path: &str) -> Result<&'a Node, ()> {
         fn internal<'a>(node: &'a Node, path: &str) -> Result<&'a Node, ()> {
             if path.is_empty() {
-                return Err(())
+                return Err(());
             }
 
-            let (name, rem) = path.find('/')
-                                  .and_then(|pos| Some(path.split_at(pos)))
-                                  .and_then(|(a,b)| Some((a, Some(b))))
-                                  .unwrap_or((path, None));
+            let (name, rem) = path
+                .find('/')
+                .and_then(|pos| Some(path.split_at(pos)))
+                .and_then(|(a, b)| Some((a, Some(b))))
+                .unwrap_or((path, None));
 
             let subnode = match *node {
-                Node::Deleted{..} => return Err(()),
-                Node::Existing{ref children, ..} => children.get(name)
+                Node::Deleted { .. } => return Err(()),
+                Node::Existing { ref children, .. } => children.get(name),
             };
 
             match subnode {
                 None => Err(()),
-                Some(subnode) =>
-                    match rem {
-                        None => Ok(subnode),
-                        Some(path) => internal(subnode, path),
-                    },
+                Some(subnode) => match rem {
+                    None => Ok(subnode),
+                    Some(path) => internal(subnode, path),
+                },
             }
         }
 
@@ -134,26 +134,28 @@ impl DTInfo {
     pub fn get_node_by_path_mut<'a>(&'a mut self, path: &str) -> Result<&'a mut Node, ()> {
         fn internal<'a>(node: &'a mut Node, path: &str) -> Result<&'a mut Node, ()> {
             if path.is_empty() {
-                return Err(())
+                return Err(());
             }
 
-            let (name, rem) = path.find('/')
-                                  .and_then(|pos| Some(path.split_at(pos)))
-                                  .and_then(|(a,b)| Some((a, Some(b))))
-                                  .unwrap_or((path, None));
+            let (name, rem) = path
+                .find('/')
+                .and_then(|pos| Some(path.split_at(pos)))
+                .and_then(|(a, b)| Some((a, Some(b))))
+                .unwrap_or((path, None));
 
             let subnode = match *node {
-                Node::Deleted{..} => return Err(()),
-                Node::Existing{ref mut children, ..} => children.get_mut(name)
+                Node::Deleted { .. } => return Err(()),
+                Node::Existing {
+                    ref mut children, ..
+                } => children.get_mut(name),
             };
 
             match subnode {
                 None => Err(()),
-                Some(subnode) =>
-                    match rem {
-                        None => Ok(subnode),
-                        Some(path) => internal(subnode, path),
-                    },
+                Some(subnode) => match rem {
+                    None => Ok(subnode),
+                    Some(path) => internal(subnode, path),
+                },
             }
         }
 
@@ -180,13 +182,17 @@ impl DTInfo {
         fn internal<'a>(node: &'a Node, label: &str) -> Result<&'a Node, ()> {
             match *node {
                 Node::Deleted { .. } => Err(()),
-                Node::Existing { ref labels, ref children, .. } => {
+                Node::Existing {
+                    ref labels,
+                    ref children,
+                    ..
+                } => {
                     if labels.iter().map(|s| s.as_str()).any(|l| l == label) {
                         Ok(node)
                     } else {
                         for child in children.values() {
                             if let Ok(node) = internal(child, label) {
-                                return Ok(node)
+                                return Ok(node);
                             }
                         }
 
@@ -215,16 +221,23 @@ impl DTInfo {
     /// found.
     pub fn get_node_by_label_mut<'a>(&'a mut self, label: &str) -> Result<&'a mut Node, ()> {
         fn internal<'a>(node: &'a mut Node, label: &str) -> Result<&'a mut Node, ()> {
-            if node.get_labels().iter().map(|s| s.as_str()).any(|l| l == label) {
-                return Ok(node)
+            if node
+                .get_labels()
+                .iter()
+                .map(|s| s.as_str())
+                .any(|l| l == label)
+            {
+                return Ok(node);
             }
 
             match *node {
                 Node::Deleted { .. } => Err(()),
-                Node::Existing { ref mut children, .. } => {
+                Node::Existing {
+                    ref mut children, ..
+                } => {
                     for child in children.values_mut() {
                         if let Ok(node) = internal(child, label) {
-                            return Ok(node)
+                            return Ok(node);
                         }
                     }
 
@@ -281,7 +294,7 @@ pub enum Node {
 
         /// The offset in bytes that this `Node` was found at within the buffer
         /// that the containing tree was parsed from.
-        offset: usize
+        offset: usize,
     },
     /// A regular node.
     Existing {
@@ -306,7 +319,6 @@ pub enum Node {
         // phandle: u32,
         // addr_cells: i32,
         // size_cells: i32,
-
         /// The labels that refer to this node.
         labels: Vec<String>,
 
@@ -321,8 +333,7 @@ impl Node {
     /// `Node`is in.
     pub fn name(&self) -> &NodeName {
         match *self {
-            Node::Deleted { ref name, .. } |
-            Node::Existing { ref name, .. } => name,
+            Node::Deleted { ref name, .. } | Node::Existing { ref name, .. } => name,
         }
     }
 
@@ -349,20 +360,30 @@ impl Node {
     /// all child nodes, recursively.
     fn merge(&mut self, other: &Node) {
         match (self, other) {
-            (&mut Node::Existing { proplist: ref mut s_props,
-                                   children: ref mut s_childs,
-                                   labels: ref mut s_labels,
-                                   .. },
-             &Node::Existing { proplist: ref o_props,
-                               children: ref o_childs,
-                               labels: ref o_labels,
-                               .. }) => {
+            (
+                &mut Node::Existing {
+                    proplist: ref mut s_props,
+                    children: ref mut s_childs,
+                    labels: ref mut s_labels,
+                    ..
+                },
+                &Node::Existing {
+                    proplist: ref o_props,
+                    children: ref o_childs,
+                    labels: ref o_labels,
+                    ..
+                },
+            ) => {
                 // merge props
                 s_props.extend(o_props.iter().map(|(k, v)| (k.to_owned(), v.to_owned())));
                 // merge nodes
                 for (name, node) in o_childs {
                     match node {
-                        &Node::Deleted { .. } => { s_childs.remove(name).expect(&format!("Deleted non-existent node {}", name)); } // FIXME: should there always be a deletable node when deleting?
+                        &Node::Deleted { .. } => {
+                            s_childs
+                                .remove(name)
+                                .expect(&format!("Deleted non-existent node {}", name));
+                        } // FIXME: should there always be a deletable node when deleting?
                         &Node::Existing { .. } => {
                             let entry = s_childs.entry(name.to_owned());
                             if let Entry::Occupied(mut e) = entry {
@@ -378,7 +399,7 @@ impl Node {
                 s_labels.sort();
                 s_labels.dedup();
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -409,8 +430,7 @@ impl Labeled for Node {
 impl Offset for Node {
     fn get_offset(&self) -> usize {
         match *self {
-            Node::Deleted { offset, .. } |
-            Node::Existing { offset, .. } => offset,
+            Node::Deleted { offset, .. } | Node::Existing { offset, .. } => offset,
         }
     }
 }
@@ -420,7 +440,12 @@ impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Node::Deleted { ref name, .. } => write!(f, "// Node {} deleted", name)?,
-            Node::Existing { ref name, ref proplist, ref children, .. } => {
+            Node::Existing {
+                ref name,
+                ref proplist,
+                ref children,
+                ..
+            } => {
                 writeln!(f, "{} {{", name)?;
                 for prop in proplist.values() {
                     writeln!(f, "    {}", prop)?;
@@ -454,8 +479,7 @@ pub enum NodeName {
 impl fmt::Display for NodeName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            NodeName::Ref(ref name) |
-            NodeName::Full(ref name) => write!(f, "{}", name),
+            NodeName::Ref(ref name) | NodeName::Full(ref name) => write!(f, "{}", name),
         }
     }
 }
@@ -467,8 +491,7 @@ impl NodeName {
     /// name.
     pub fn as_str(&self) -> &str {
         match *self {
-            NodeName::Ref(ref name) |
-            NodeName::Full(ref name) => name,
+            NodeName::Ref(ref name) | NodeName::Full(ref name) => name,
         }
     }
 }
@@ -484,7 +507,7 @@ pub enum Property {
         name: String,
         /// The offset in bytes that this `Property` was found at within the
         /// buffer that the containing tree was parsed from.
-        offset: usize
+        offset: usize,
     },
     /// A normal property. Unlike `Node`s, a `Property`'s name will never be a
     /// reference. If `val` is `None` then the property was in the form
@@ -527,9 +550,9 @@ impl Property {
     /// `Property`is in.
     pub fn name(&self) -> &str {
         match *self {
-           Property::Deleted { ref name, .. } |
-           Property::Existing { ref name, .. } |
-           Property::IncBin { ref name, .. } => name
+            Property::Deleted { ref name, .. }
+            | Property::Existing { ref name, .. }
+            | Property::IncBin { ref name, .. } => name,
         }
     }
 }
@@ -538,8 +561,7 @@ impl Labeled for Property {
     fn add_label(&mut self, label: &str) -> Result<(), ()> {
         match *self {
             Property::Deleted { .. } => Err(()),
-            Property::Existing { ref mut labels, .. } |
-            Property::IncBin { ref mut labels, .. }=> {
+            Property::Existing { ref mut labels, .. } | Property::IncBin { ref mut labels, .. } => {
                 let label = label.to_owned();
                 if labels.contains(&label) {
                     labels.push(label);
@@ -552,8 +574,7 @@ impl Labeled for Property {
     fn get_labels(&self) -> &[String] {
         match *self {
             Property::Deleted { .. } => &[],
-            Property::Existing { ref labels, .. } |
-            Property::IncBin { ref labels, .. } => labels,
+            Property::Existing { ref labels, .. } | Property::IncBin { ref labels, .. } => labels,
         }
     }
 }
@@ -561,9 +582,9 @@ impl Labeled for Property {
 impl Offset for Property {
     fn get_offset(&self) -> usize {
         match *self {
-            Property::Deleted { offset, .. } |
-            Property::Existing { offset, .. } |
-            Property::IncBin { offset, .. } => offset,
+            Property::Deleted { offset, .. }
+            | Property::Existing { offset, .. }
+            | Property::IncBin { offset, .. } => offset,
         }
     }
 }
@@ -573,7 +594,9 @@ impl fmt::Display for Property {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Property::Deleted { ref name, .. } => write!(f, "// Property {} deleted", name)?,
-            Property::Existing { ref name, ref val, .. } => {
+            Property::Existing {
+                ref name, ref val, ..
+            } => {
                 write!(f, "{}", name)?;
                 if let Some(ref data) = *val {
                     if !data.is_empty() {
@@ -585,8 +608,10 @@ impl fmt::Display for Property {
                     }
                 }
                 write!(f, ";")?;
-            },
-            Property::IncBin { ref name, ref path, .. } => write!(f, "{} = {};", name, path)?,
+            }
+            Property::IncBin {
+                ref name, ref path, ..
+            } => write!(f, "{} = {};", name, path)?,
         }
 
         Ok(())
@@ -684,7 +709,7 @@ mod tests {
                 children: HashMap::new(),
                 labels: Vec::new(),
                 offset: 0,
-            }
+            },
         };
         let node = Node::Existing {
             name: NodeName::Full("node1".to_owned()),
@@ -694,16 +719,15 @@ mod tests {
             offset: 0,
         };
         match tree.root {
-            Node::Existing { ref mut children, .. } => {
-               children.insert(node.name().as_str().to_owned(), node.clone());
+            Node::Existing {
+                ref mut children, ..
+            } => {
+                children.insert(node.name().as_str().to_owned(), node.clone());
             }
             _ => unreachable!(),
         }
         let path = "/node1";
-        assert_eq!(
-            tree.get_node_by_path(path),
-            Ok(&node)
-        );
+        assert_eq!(tree.get_node_by_path(path), Ok(&node));
     }
 
     #[test]
@@ -717,7 +741,7 @@ mod tests {
                 children: HashMap::new(),
                 labels: Vec::new(),
                 offset: 0,
-            }
+            },
         };
         let node = Node::Existing {
             name: NodeName::Full("node1".to_owned()),
@@ -727,15 +751,14 @@ mod tests {
             offset: 0,
         };
         match tree.root {
-            Node::Existing { ref mut children, .. } => {
-               children.insert(node.name().as_str().to_owned(), node.clone());
+            Node::Existing {
+                ref mut children, ..
+            } => {
+                children.insert(node.name().as_str().to_owned(), node.clone());
             }
             _ => unreachable!(),
         }
         let label = "meh";
-        assert_eq!(
-            tree.get_node_by_label(label),
-            Ok(&node)
-        );
+        assert_eq!(tree.get_node_by_label(label), Ok(&node));
     }
 }

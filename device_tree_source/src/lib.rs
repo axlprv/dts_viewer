@@ -12,9 +12,9 @@
 #[macro_use]
 extern crate nom;
 
-pub mod tree;
-pub mod parser;
 pub mod include;
+pub mod parser;
+pub mod tree;
 
 use std::borrow::Borrow;
 use std::iter::once;
@@ -50,13 +50,15 @@ pub enum ParseError {
 /// assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 5), Err(ParseError::NotFound));
 /// ```
 pub fn line_to_byte_offset<K, I>(bytes: I, line: usize) -> Result<usize, ParseError>
-    where K: Borrow<u8> + Eq,
-          I: Iterator<Item = K>
+where
+    K: Borrow<u8> + Eq,
+    I: Iterator<Item = K>,
 {
     if line == 1 {
         Ok(0)
     } else {
-        bytes.enumerate()
+        bytes
+            .enumerate()
             .filter(|&(_, ref byte)| byte.borrow() == &b'\n')
             .nth(line - 2)
             .map(|(offset, _)| offset + 1)
@@ -83,10 +85,12 @@ pub fn line_to_byte_offset<K, I>(bytes: I, line: usize) -> Result<usize, ParseEr
 /// assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 33), Err(ParseError::NotFound));
 /// ```
 pub fn byte_offset_to_line_col<K, I>(bytes: I, offset: usize) -> Result<(usize, usize), ParseError>
-    where K: Borrow<u8> + Eq,
-          I: Iterator<Item = K>
+where
+    K: Borrow<u8> + Eq,
+    I: Iterator<Item = K>,
 {
-    let opt = bytes.map(|byte| Some(byte))
+    let opt = bytes
+        .map(|byte| Some(byte))
         .chain(once(None))
         .enumerate()
         .filter_map(|(off, byte)| match byte {
@@ -115,17 +119,34 @@ mod tests {
         assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 2), Ok(6));
         assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 3), Ok(18));
         assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 4), Ok(19));
-        assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 5), Err(ParseError::NotFound));
+        assert_eq!(
+            line_to_byte_offset(string.as_bytes().iter(), 5),
+            Err(ParseError::NotFound)
+        );
     }
 
     #[test]
     fn bytes_to_lines() {
         let string = "Howdy\nHow goes it\n\nI'm doing fine";
-        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 0), Ok((1, 1)));
-        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 8), Ok((2, 3)));
-        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 20), Ok((4, 2)));
-        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 18), Ok((3, 1)));
-        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 33),
-                   Err(ParseError::NotFound));
+        assert_eq!(
+            byte_offset_to_line_col(string.as_bytes().iter(), 0),
+            Ok((1, 1))
+        );
+        assert_eq!(
+            byte_offset_to_line_col(string.as_bytes().iter(), 8),
+            Ok((2, 3))
+        );
+        assert_eq!(
+            byte_offset_to_line_col(string.as_bytes().iter(), 20),
+            Ok((4, 2))
+        );
+        assert_eq!(
+            byte_offset_to_line_col(string.as_bytes().iter(), 18),
+            Ok((3, 1))
+        );
+        assert_eq!(
+            byte_offset_to_line_col(string.as_bytes().iter(), 33),
+            Err(ParseError::NotFound)
+        );
     }
 }

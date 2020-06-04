@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::fmt;
+use std::path::{Path, PathBuf};
 
-use device_tree_source::tree::{DTInfo, Node, NodeName, Property, Offset};
+use device_tree_source::tree::{DTInfo, Node, NodeName, Offset, Property};
 
 #[derive(Debug)]
 pub enum Element<'a> {
@@ -72,31 +72,31 @@ impl<'a> LabelStore<'a> {
             Node::Deleted { ref name, .. } => {
                 let node_path = match *name {
                     NodeName::Full(ref name) => path.join(name),
-                    NodeName::Ref(ref label) => {
-                        self.path_from_label(label).unwrap().to_owned()
-                    }
+                    NodeName::Ref(ref label) => self.path_from_label(label).unwrap().to_owned(),
                 };
 
                 self.delete_labels(&node_path);
-
 
                 self.paths
                     .entry(node_path.clone())
                     .or_insert_with(Vec::new)
                     .push(Element::Node(node));
 
-                let paths: Vec<PathBuf> = self.paths
+                let paths: Vec<PathBuf> = self
+                    .paths
                     .iter()
-                    .filter_map(|(key, val)| if key.starts_with(&node_path) {
-                        match val.last() {
-                            Some(&Element::Node(&Node::Existing { .. })) |
-                            Some(&Element::Prop(&Property::Existing { .. })) => {
-                                Some(key.to_owned())
+                    .filter_map(|(key, val)| {
+                        if key.starts_with(&node_path) {
+                            match val.last() {
+                                Some(&Element::Node(&Node::Existing { .. }))
+                                | Some(&Element::Prop(&Property::Existing { .. })) => {
+                                    Some(key.to_owned())
+                                }
+                                _ => None,
                             }
-                            _ => None,
+                        } else {
+                            None
                         }
-                    } else {
-                        None
                     })
                     .collect();
 
@@ -105,12 +105,16 @@ impl<'a> LabelStore<'a> {
                     self.paths.get_mut(path).unwrap().push(Element::Node(node));
                 }
             }
-            Node::Existing { ref name, ref proplist, ref children, ref labels, .. } => {
+            Node::Existing {
+                ref name,
+                ref proplist,
+                ref children,
+                ref labels,
+                ..
+            } => {
                 let node_path = match *name {
                     NodeName::Full(ref name) => path.join(name),
-                    NodeName::Ref(ref label) => {
-                        self.path_from_label(label).unwrap().to_owned()
-                    }
+                    NodeName::Ref(ref label) => self.path_from_label(label).unwrap().to_owned(),
                 };
 
                 self.insert_labels(&node_path, labels);
