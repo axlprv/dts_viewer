@@ -2,7 +2,7 @@
 
 use std::fmt;
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
+use std::collections::hash_map::{Entry, RandomState};
 
 /// Trait applied to all data structures in a device tree that can have a
 /// label/alias.
@@ -326,6 +326,24 @@ impl Node {
         }
     }
 
+    /// Convenience function to get the `proplist`. If the node has the type
+    /// `Node::Deleted` returns `None`.
+    pub fn proplist(&self) -> Option<&HashMap<String, Property>> {
+        match *self {
+            Node::Deleted { .. } => None,
+            Node::Existing { ref proplist, .. } => Some(proplist),
+        }
+    }
+
+    /// Convenience function to get the `children`. If the node has the type
+    /// `Node::Deleted` returns `None`.
+    pub fn children(&self) -> Option<&HashMap<String, Node, RandomState>> {
+        match *self {
+            Node::Deleted { .. } => None,
+            Node::Existing { ref children, .. } => Some(children),
+        }
+    }
+
     /// Merge one `Node` into another. If a property exists in both `Node`s the
     /// value in the `other` `Node` will be kept. This merge is also applied to
     /// all child nodes, recursively.
@@ -489,6 +507,19 @@ pub enum Property {
         /// buffer that the containing tree was parsed from.
         offset: usize,
     },
+    /// A property which contains the path to the external file which
+    /// contains the actual binary data.
+    IncBin {
+        /// The full name of the property.
+        name: String,
+        /// Path to the external file which contains the binary data.
+        path: String,
+        /// The labels that refer to this property.
+        labels: Vec<String>,
+        /// The offset in bytes that this `Property` was found at within the
+        /// buffer that the containing tree was parsed from.
+        offset: usize,
+    },
 }
 
 impl Property {
@@ -496,8 +527,9 @@ impl Property {
     /// `Property`is in.
     pub fn name(&self) -> &str {
         match *self {
-           Property::Deleted{ref name, ..} |
-           Property::Existing{ref name, ..} => name
+           Property::Deleted { ref name, .. } |
+           Property::Existing { ref name, .. } |
+           Property::IncBin { ref name, .. } => name
         }
     }
 }
@@ -506,7 +538,8 @@ impl Labeled for Property {
     fn add_label(&mut self, label: &str) -> Result<(), ()> {
         match *self {
             Property::Deleted { .. } => Err(()),
-            Property::Existing { ref mut labels, .. } => {
+            Property::Existing { ref mut labels, .. } |
+            Property::IncBin { ref mut labels, .. }=> {
                 let label = label.to_owned();
                 if labels.contains(&label) {
                     labels.push(label);
@@ -519,7 +552,8 @@ impl Labeled for Property {
     fn get_labels(&self) -> &[String] {
         match *self {
             Property::Deleted { .. } => &[],
-            Property::Existing { ref labels, .. } => labels,
+            Property::Existing { ref labels, .. } |
+            Property::IncBin { ref labels, .. } => labels,
         }
     }
 }
@@ -528,7 +562,8 @@ impl Offset for Property {
     fn get_offset(&self) -> usize {
         match *self {
             Property::Deleted { offset, .. } |
-            Property::Existing { offset, .. } => offset,
+            Property::Existing { offset, .. } |
+            Property::IncBin { offset, .. } => offset,
         }
     }
 }
@@ -550,7 +585,8 @@ impl fmt::Display for Property {
                     }
                 }
                 write!(f, ";")?;
-            }
+            },
+            Property::IncBin { ref name, ref path, .. } => write!(f, "{} = {};", name, path)?,
         }
 
         Ok(())

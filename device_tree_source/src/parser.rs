@@ -550,6 +550,23 @@ named_args!(parse_prop(input_len: usize)<Property>, comments_ws!(alt!(
         offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
         labels: many0!(terminated!(parse_label, char!(':'))) >>
         name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
+        data: preceded!(
+            tag!("= /incbin/("),
+            delimited!(
+            char!('"'),
+            escape_c_string,
+            char!('"'))) >>
+            char!(')') >>
+            char!(';') >>
+        ( Property::IncBin { name: name,
+                             path: data,
+                             labels: labels,
+                             offset: input_len - offset } )
+    ) |
+    do_parse!(
+        offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
+        labels: many0!(terminated!(parse_label, char!(':'))) >>
+        name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
         data: opt!(preceded!(
             char!('='),
             separated_nonempty_list!(comments_ws!(char!(',')), parse_data))) >>
